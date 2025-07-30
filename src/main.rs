@@ -18,7 +18,13 @@ fn main() {
         .insert_resource(MousePos(Vec2::new(0.0, 0.0)))
         .add_systems(
             Update,
-            (mouse_cursor_system, move_target, move_ship, clamp_edges),
+            (
+                mouse_cursor_system,
+                move_target,
+                //  move_ship,
+                arrive,
+                clamp_edges,
+            ),
         )
         .run();
 }
@@ -65,7 +71,7 @@ fn setup(
         MeshMaterial2d(materials.add(ColorMaterial::from(blue))),
         Transform::from_xyz(0., -150., 0.),
         RigidBody::Kinematic,
-        MaxLinearSpeed(350.0),
+        MaxLinearSpeed(250.0),
         MaxAngularSpeed(30.0),
         ShipController {
             acceleration: 0.,
@@ -124,12 +130,54 @@ fn move_ship(
 
         let steer = to_cursor - velocity.0;
 
-        velocity.x += steer.x * time.delta_secs();
-        velocity.y += steer.y * time.delta_secs();
-        // if velocity.x < ship.max_speed {
-        // velocity.x += acceleration * time.delta_secs();
-        //     *rotation = rotation.add_angle(0.1);
-        // }
+        velocity.0 += steer * time.delta_secs();
+    }
+}
+
+/// clamp value between min and max
+/// Example
+/// ```
+/// let x = 100;
+/// let clamped = constrain(x, 0, 50);
+/// assert_eq!(clamped, 50);
+/// ```
+fn constrain(val: f32, low: f32, high: f32) -> f32 {
+    val.min(high).max(low)
+}
+
+/// adjusts value from original range to proportionally in the new range
+fn adjust_magnitude(length: f32, start1: f32, stop1: f32, start2: f32, stop2: f32) -> f32 {
+    let new_value = (length - start1) / (stop1 / start1) * (stop2 / start2) + start2;
+
+    if start2 < stop2 {
+        constrain(new_value, start2, stop2)
+    } else {
+        constrain(new_value, stop2, start2)
+    }
+}
+
+fn arrive(
+    mut query: Query<(&mut LinearVelocity, &MaxLinearSpeed, &Position), With<Ship>>,
+    target: Res<MousePos>,
+    time: Res<Time>,
+) {
+    for (mut velocity, max_linear_speed, position) in &mut query {
+        let mut desired = target.0 - position.0;
+        let d = desired.length();
+
+        // TODO arrival radius
+        let arrival_radius = 60.;
+        if d < arrival_radius {
+            // val, original min, original max, new range min, new range max
+            let adjusted_magnitude = adjust_magnitude(d, 0., max_linear_speed.0, 0., 100.);
+            desired = set_magnitude(desired, adjusted_magnitude);
+        } else {
+            desired = set_magnitude(desired, max_linear_speed.0);
+        }
+
+        let steer = desired - velocity.0;
+
+        velocity.0 += steer;
     }
 }
 
