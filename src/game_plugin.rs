@@ -1,0 +1,165 @@
+use avian2d::prelude::*;
+use bevy::color::palettes::css::{BLUE, RED};
+use bevy::prelude::*;
+
+use crate::input_plugin::{MainCamera, Target};
+use crate::steering_plugin::{Behaviour, Ship, ShipController};
+
+pub struct GamePlugin;
+
+impl Plugin for GamePlugin {
+    fn build(&self, app: &mut App) {
+        app.add_plugins((DefaultPlugins, PhysicsPlugins::default()))
+            .init_state::<Behaviour>()
+            .add_systems(Startup, setup)
+            .add_systems(Update, (clamp_edges_system, button_handler_system));
+    }
+}
+
+fn setup(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    mode: Res<State<Behaviour>>,
+) {
+    commands.spawn((Camera2d, MainCamera));
+
+    let target_size = 15.0;
+    let circle = Circle::new(target_size);
+    let red: Color = RED.into();
+
+    let ship_height = 15.0;
+    let ship_width = 10.0;
+    let blue: Color = BLUE.into();
+    let triangle = Triangle2d::new(
+        Vec2::Y * ship_height,
+        Vec2::new(-ship_width, -ship_width),
+        Vec2::new(ship_width, -ship_width),
+    );
+
+    commands.spawn((
+        Mesh2d(meshes.add(circle)),
+        MeshMaterial2d(materials.add(ColorMaterial::from(red))),
+        Transform::from_xyz(-150., 0., 0.),
+        Target,
+    ));
+    commands.spawn((
+        Mesh2d(meshes.add(triangle)),
+        MeshMaterial2d(materials.add(ColorMaterial::from(blue))),
+        Transform::from_xyz(0., -150., 0.),
+        RigidBody::Kinematic,
+        MaxLinearSpeed(250.0),
+        MaxAngularSpeed(10.0),
+        ShipController,
+        Ship,
+    ));
+
+    commands.spawn(button(&mode));
+}
+
+fn button(current_state: &State<Behaviour>) -> impl Bundle + use<> {
+    let btn_text = if *current_state == Behaviour::Seek {
+        "Seek"
+    } else {
+        "Arrive"
+    };
+    (
+        Node {
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            align_items: AlignItems::Start,
+            justify_content: JustifyContent::Start,
+            ..default()
+        },
+        children![(
+            Button,
+            Node {
+                width: Val::Px(150.0),
+                height: Val::Px(65.0),
+                border: UiRect::all(Val::Px(5.0)),
+                // horizontally center child text
+                justify_content: JustifyContent::Center,
+                // vertically center child text
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            BorderColor(Color::BLACK),
+            BorderRadius::MAX,
+            BackgroundColor(Color::WHITE),
+            children![(
+                Text::new(btn_text),
+                TextFont {
+                    font_size: 33.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.24, 0.21, 0.19)),
+                TextShadow {
+                    color: Color::srgb(0.64, 0.61, 0.59),
+                    offset: Vec2 { x: 2.0, y: 2.0 }
+                },
+            )]
+        )],
+    )
+}
+
+#[allow(clippy::type_complexity)]
+fn button_handler_system(
+    mode: Res<State<Behaviour>>,
+    mut next_state: ResMut<NextState<Behaviour>>,
+    mut interaction_query: Query<
+        (
+            &Interaction,
+            &mut BackgroundColor,
+            &mut BorderColor,
+            &Children,
+        ),
+        (Changed<Interaction>, With<Button>),
+    >,
+    mut text_query: Query<&mut Text>,
+) {
+    for (interaction, mut bg, mut border, children) in &mut interaction_query {
+        let mut text = text_query.get_mut(children[0]).unwrap();
+
+        match interaction {
+            Interaction::Hovered => {
+                border.0 = Color::WHITE;
+                bg.0 = Color::BLACK;
+                // text_colour.0 = Color::WHITE;
+            }
+            Interaction::None => {
+                bg.0 = Color::WHITE;
+                border.0 = Color::BLACK;
+                // text_colour.0 = Color::srgb(0.24, 0.21, 0.19);
+            }
+            Interaction::Pressed => {
+                if *mode == Behaviour::Seek {
+                    **text = "Arrive".to_string();
+                    next_state.set(Behaviour::Arrive);
+                } else {
+                    **text = "Seek".to_string();
+                    next_state.set(Behaviour::Seek);
+                }
+            }
+        }
+    }
+}
+
+fn clamp_edges_system(mut query: Query<&mut Transform, With<Ship>>) {
+    let half_max_width = 400.;
+    let half_max_height = 300.;
+
+    // bevy screen centre is 0,0
+    for mut transform in &mut query {
+        if transform.translation.x > half_max_width {
+            transform.translation.x = -(half_max_width);
+        } else if transform.translation.x < (-half_max_width) {
+            transform.translation.x = half_max_width;
+        }
+
+        if transform.translation.y > half_max_height {
+            transform.translation.y = -(half_max_height);
+        } else if transform.translation.y < (-half_max_height) {
+            transform.translation.y = half_max_height;
+        }
+    }
+}
