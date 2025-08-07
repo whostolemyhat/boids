@@ -54,16 +54,7 @@ fn setup(
         Ship,
     ));
 
-    commands.spawn(button(&mode));
-}
-
-fn button(current_state: &State<Behaviour>) -> impl Bundle + use<> {
-    let btn_text = if *current_state == Behaviour::Seek {
-        "Seek"
-    } else {
-        "Arrive"
-    };
-    (
+    commands.spawn((
         Node {
             width: Val::Percent(100.0),
             height: Val::Percent(100.0),
@@ -72,32 +63,50 @@ fn button(current_state: &State<Behaviour>) -> impl Bundle + use<> {
             ..default()
         },
         children![(
-            Button,
             Node {
-                width: Val::Px(150.0),
-                height: Val::Px(65.0),
-                border: UiRect::all(Val::Px(5.0)),
-                // horizontally center child text
-                justify_content: JustifyContent::Center,
-                // vertically center child text
+                flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
                 ..default()
             },
-            BorderColor(Color::BLACK),
-            BorderRadius::MAX,
-            BackgroundColor(Color::WHITE),
-            children![(
-                Text::new(btn_text),
-                TextFont {
-                    font_size: 33.0,
-                    ..default()
-                },
-                TextColor(Color::srgb(0.24, 0.21, 0.19)),
-                TextShadow {
-                    color: Color::srgb(0.64, 0.61, 0.59),
-                    offset: Vec2 { x: 2.0, y: 2.0 }
-                },
-            )]
+            children![button("Seek"), button("Arrive"), button("Wander")],
+        )],
+    ));
+}
+
+fn button(btn_text: &str) -> impl Bundle + use<> {
+    let behaviour = match btn_text {
+        "Arrive" => Behaviour::Arrive,
+        "Wander" => Behaviour::Wander,
+        _ => Behaviour::Seek,
+    };
+
+    (
+        Button,
+        Node {
+            width: Val::Px(100.0),
+            height: Val::Px(35.0),
+            border: UiRect::all(Val::Px(3.0)),
+            // horizontally center child text
+            justify_content: JustifyContent::Center,
+            // vertically center child text
+            align_items: AlignItems::Center,
+            ..default()
+        },
+        behaviour,
+        BorderColor(Color::BLACK),
+        BorderRadius::MAX,
+        BackgroundColor(Color::WHITE),
+        children![(
+            Text::new(btn_text),
+            TextFont {
+                font_size: 16.0,
+                ..default()
+            },
+            TextColor(Color::srgb(0.24, 0.21, 0.19)),
+            TextShadow {
+                color: Color::srgb(0.64, 0.61, 0.59),
+                offset: Vec2 { x: 0.5, y: 0.5 }
+            },
         )],
     )
 }
@@ -124,19 +133,22 @@ fn button_handler_system(
             Interaction::Hovered => {
                 border.0 = Color::WHITE;
                 bg.0 = Color::BLACK;
-                // text_colour.0 = Color::WHITE;
             }
             Interaction::None => {
                 bg.0 = Color::WHITE;
                 border.0 = Color::BLACK;
-                // text_colour.0 = Color::srgb(0.24, 0.21, 0.19);
             }
             Interaction::Pressed => {
-                if *mode == Behaviour::Seek {
-                    **text = "Arrive".to_string();
+                if *mode == Behaviour::Arrive {
+                    println!("Arrive");
+                    // **text = "Arrive".to_string();
                     next_state.set(Behaviour::Arrive);
+                } else if *mode == Behaviour::Wander {
+                    println!("Wander");
+                    next_state.set(Behaviour::Wander);
                 } else {
-                    **text = "Seek".to_string();
+                    println!("Seek");
+                    // **text = "Seek".to_string();
                     next_state.set(Behaviour::Seek);
                 }
             }
