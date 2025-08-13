@@ -20,7 +20,6 @@ fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
-    mode: Res<State<Behaviour>>,
 ) {
     commands.spawn((Camera2d, MainCamera));
 
@@ -111,24 +110,21 @@ fn button(btn_text: &str) -> impl Bundle + use<> {
     )
 }
 
+// TODO highlight current behaviour
 #[allow(clippy::type_complexity)]
 fn button_handler_system(
-    mode: Res<State<Behaviour>>,
     mut next_state: ResMut<NextState<Behaviour>>,
     mut interaction_query: Query<
         (
             &Interaction,
             &mut BackgroundColor,
             &mut BorderColor,
-            &Children,
+            &Behaviour,
         ),
         (Changed<Interaction>, With<Button>),
     >,
-    mut text_query: Query<&mut Text>,
 ) {
-    for (interaction, mut bg, mut border, children) in &mut interaction_query {
-        let mut text = text_query.get_mut(children[0]).unwrap();
-
+    for (interaction, mut bg, mut border, behaviour) in &mut interaction_query {
         match interaction {
             Interaction::Hovered => {
                 border.0 = Color::WHITE;
@@ -138,40 +134,38 @@ fn button_handler_system(
                 bg.0 = Color::WHITE;
                 border.0 = Color::BLACK;
             }
-            Interaction::Pressed => {
-                if *mode == Behaviour::Arrive {
-                    println!("Arrive");
-                    // **text = "Arrive".to_string();
+            Interaction::Pressed => match behaviour {
+                Behaviour::Arrive => {
                     next_state.set(Behaviour::Arrive);
-                } else if *mode == Behaviour::Wander {
-                    println!("Wander");
+                }
+                Behaviour::Wander => {
                     next_state.set(Behaviour::Wander);
-                } else {
-                    println!("Seek");
-                    // **text = "Seek".to_string();
+                }
+                Behaviour::Seek => {
                     next_state.set(Behaviour::Seek);
                 }
-            }
+            },
         }
     }
 }
 
-fn clamp_edges_system(mut query: Query<&mut Transform, With<Ship>>) {
+// keep in middle of screen
+fn clamp_edges_system(mut query: Query<&mut Position, With<Ship>>) {
     let half_max_width = 400.;
     let half_max_height = 300.;
 
     // bevy screen centre is 0,0
-    for mut transform in &mut query {
-        if transform.translation.x > half_max_width {
-            transform.translation.x = -(half_max_width);
-        } else if transform.translation.x < (-half_max_width) {
-            transform.translation.x = half_max_width;
+    for mut position in &mut query {
+        if position.x > half_max_width {
+            position.x = -(half_max_width);
+        } else if position.x < (-half_max_width) {
+            position.x = half_max_width;
         }
 
-        if transform.translation.y > half_max_height {
-            transform.translation.y = -(half_max_height);
-        } else if transform.translation.y < (-half_max_height) {
-            transform.translation.y = half_max_height;
+        if position.y > half_max_height {
+            position.y = -(half_max_height);
+        } else if position.y < (-half_max_height) {
+            position.y = half_max_height;
         }
     }
 }

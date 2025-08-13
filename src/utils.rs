@@ -5,7 +5,7 @@ use std::f32::consts::PI;
 // utils
 /// normalise and scale a vector
 pub fn set_magnitude(vector: Vec2, scale: f32) -> Vec2 {
-    vector.normalize() * scale
+    vector.normalize_or_zero() * scale
 }
 
 /// clamp value between min and max
