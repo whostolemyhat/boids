@@ -14,9 +14,9 @@ use crate::{
 
 #[derive(PartialEq, Debug, Hash, Eq, Clone, States, Default, Component)]
 pub enum Behaviour {
+    #[default]
     Seek,
     Arrive,
-    #[default]
     Wander,
 }
 

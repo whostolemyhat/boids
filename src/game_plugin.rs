@@ -67,10 +67,23 @@ fn setup(
                 align_items: AlignItems::Center,
                 ..default()
             },
-            children![button("Seek"), button("Arrive"), button("Wander")],
+            children![
+                // not automatic, make sure this matches #[default] in Behaviour enum
+                create_selected_button("Seek"),
+                create_normal_button("Arrive"),
+                create_normal_button("Wander")
+            ],
         )],
     ));
 }
+
+#[derive(Component)]
+struct SelectedOption;
+
+const NORMAL_BUTTON: Color = Color::srgb(0.95, 0.75, 0.35);
+const HOVERED_BUTTON: Color = Color::srgb(1., 0.83, 0.52);
+const HOVERED_SELECTED_BUTTON: Color = Color::srgb(1., 0.54, 0.8);
+const SELECTED_BUTTON: Color = Color::srgb(0.96, 0.05, 0.7);
 
 fn button(btn_text: &str) -> impl Bundle + use<> {
     let behaviour = match btn_text {
@@ -89,12 +102,14 @@ fn button(btn_text: &str) -> impl Bundle + use<> {
             justify_content: JustifyContent::Center,
             // vertically center child text
             align_items: AlignItems::Center,
+            margin: UiRect {
+                top: Val::Px(15.),
+                ..default()
+            },
             ..default()
         },
         behaviour,
-        BorderColor(Color::BLACK),
         BorderRadius::MAX,
-        BackgroundColor(Color::WHITE),
         children![(
             Text::new(btn_text),
             TextFont {
@@ -109,42 +124,76 @@ fn button(btn_text: &str) -> impl Bundle + use<> {
         )],
     )
 }
+fn create_normal_button(btn_text: &str) -> impl Bundle + use<> {
+    (
+        button(btn_text),
+        BackgroundColor(NORMAL_BUTTON),
+        BorderColor(Color::BLACK),
+    )
+}
+
+fn create_selected_button(btn_text: &str) -> impl Bundle + use<> {
+    (
+        button(btn_text),
+        BackgroundColor(SELECTED_BUTTON),
+        SelectedOption,
+        BorderColor(Color::WHITE),
+    )
+}
 
 // TODO highlight current behaviour
 #[allow(clippy::type_complexity)]
 fn button_handler_system(
+    mut commands: Commands,
     mut next_state: ResMut<NextState<Behaviour>>,
     mut interaction_query: Query<
         (
+            Entity,
             &Interaction,
             &mut BackgroundColor,
             &mut BorderColor,
             &Behaviour,
         ),
-        (Changed<Interaction>, With<Button>),
+        (Changed<Interaction>, With<Button>, Without<SelectedOption>),
     >,
+    current_selected: Single<
+        (Entity, &mut BackgroundColor, &mut BorderColor),
+        With<SelectedOption>,
+    >,
+    mode: Res<State<Behaviour>>,
 ) {
-    for (interaction, mut bg, mut border, behaviour) in &mut interaction_query {
-        match interaction {
-            Interaction::Hovered => {
+    let (previous_button, mut previous_button_color, mut previous_button_border) =
+        current_selected.into_inner();
+
+    for (entity, interaction, mut bg, mut border, behaviour) in &mut interaction_query {
+        if *interaction == Interaction::Pressed && *behaviour != **mode {
+            *previous_button_color = NORMAL_BUTTON.into();
+            *previous_button_border = Color::BLACK.into();
+            commands.entity(previous_button).remove::<SelectedOption>();
+            commands.entity(entity).insert(SelectedOption);
+            next_state.set(behaviour.clone());
+            *bg = SELECTED_BUTTON.into();
+        }
+
+        let is_selected = *behaviour == **mode;
+        match (interaction, is_selected) {
+            (Interaction::Hovered, true) => {
                 border.0 = Color::WHITE;
-                bg.0 = Color::BLACK;
+                *bg = HOVERED_SELECTED_BUTTON.into();
             }
-            Interaction::None => {
-                bg.0 = Color::WHITE;
+            (Interaction::Hovered, false) => {
+                border.0 = Color::WHITE;
+                *bg = HOVERED_BUTTON.into();
+            }
+            (Interaction::None, true) => {
+                *bg = SELECTED_BUTTON.into();
                 border.0 = Color::BLACK;
             }
-            Interaction::Pressed => match behaviour {
-                Behaviour::Arrive => {
-                    next_state.set(Behaviour::Arrive);
-                }
-                Behaviour::Wander => {
-                    next_state.set(Behaviour::Wander);
-                }
-                Behaviour::Seek => {
-                    next_state.set(Behaviour::Seek);
-                }
-            },
+            (Interaction::None, false) => {
+                *bg = NORMAL_BUTTON.into();
+                border.0 = Color::BLACK;
+            }
+            _ => {}
         }
     }
 }
