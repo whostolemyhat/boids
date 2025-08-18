@@ -3,7 +3,7 @@ use bevy::color::palettes::css::{BLUE, RED};
 use bevy::prelude::*;
 
 use crate::input_plugin::{MainCamera, Target};
-use crate::steering_plugin::{Behaviour, Ship, ShipController};
+use crate::steering_plugin::{Behaviour, Ship, WrapEdges};
 
 pub struct GamePlugin;
 
@@ -49,8 +49,8 @@ fn setup(
         RigidBody::Kinematic,
         MaxLinearSpeed(250.0),
         MaxAngularSpeed(10.0),
-        ShipController,
         Ship,
+        WrapEdges,
     ));
 
     commands.spawn((
@@ -71,7 +71,8 @@ fn setup(
                 // not automatic, make sure this matches #[default] in Behaviour enum
                 create_selected_button("Seek"),
                 create_normal_button("Arrive"),
-                create_normal_button("Wander")
+                create_normal_button("Wander"),
+                create_normal_button("Pursue"),
             ],
         )],
     ));
@@ -89,6 +90,7 @@ fn button(btn_text: &str) -> impl Bundle + use<> {
     let behaviour = match btn_text {
         "Arrive" => Behaviour::Arrive,
         "Wander" => Behaviour::Wander,
+        "Pursue" => Behaviour::Pursue,
         _ => Behaviour::Seek,
     };
 
@@ -199,7 +201,7 @@ fn button_handler_system(
 }
 
 // keep in middle of screen
-fn clamp_edges_system(mut query: Query<&mut Position, With<Ship>>) {
+fn clamp_edges_system(mut query: Query<&mut Position, With<WrapEdges>>) {
     let half_max_width = 400.;
     let half_max_height = 300.;
 

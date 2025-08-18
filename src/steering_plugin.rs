@@ -1,5 +1,5 @@
 use avian2d::prelude::*;
-use bevy::prelude::ops::{cos, sin};
+use bevy::prelude::ops::{atan2, cos, sin};
 use bevy::prelude::*;
 use bevy_rand::prelude::*;
 use rand::Rng;
@@ -18,6 +18,7 @@ pub enum Behaviour {
     Seek,
     Arrive,
     Wander,
+    Pursue,
 }
 
 #[derive(Resource)]
@@ -37,9 +38,12 @@ impl Plugin for SteeringPlugin {
                     seek_system.run_if(in_state(Behaviour::Seek)),
                     arrive_system.run_if(in_state(Behaviour::Arrive)),
                     wander_system.run_if(in_state(Behaviour::Wander)),
+                    pursue_system.run_if(in_state(Behaviour::Pursue)),
                     rotate_system,
                 ),
-            );
+            )
+            .add_systems(OnEnter(Behaviour::Pursue), on_start_pursue)
+            .add_systems(OnExit(Behaviour::Pursue), clean_up_pursue);
     }
 }
 
@@ -50,13 +54,19 @@ struct Theta(f32);
 pub struct Ship;
 
 #[derive(Component)]
-pub struct ShipController;
-
-#[derive(Component)]
 pub struct WanderTarget;
 
 #[derive(Component)]
 struct WanderRadius;
+
+#[derive(Component)]
+struct PursueTarget;
+
+#[derive(Component)]
+struct PursueOffset;
+
+#[derive(Component)]
+pub struct WrapEdges;
 
 fn setup(
     mut commands: Commands,
@@ -127,7 +137,6 @@ fn arrive_system(
         let mut desired = target.0 - position.0;
         let d = desired.length();
 
-        // TODO arrival radius
         let arrival_radius = 60.;
         if d < arrival_radius {
             // val, original min, original max, new range min, new range max
@@ -161,14 +170,6 @@ fn wander_system(
     let displace = rng.random_range(-0.3..0.3);
 
     for (mut velocity, max_linear_speed, position) in query {
-        // let target = calc_wander(
-        //     position,
-        //     &velocity,
-        //     distance_ahead,
-        //     wander_radius,
-        //     // TODO this means all ships would move identically
-        //     wander_theta.0,
-        // );
         let mut circle_pos = set_magnitude(velocity.0, distance_ahead);
         circle_pos += position.0;
 
@@ -177,7 +178,6 @@ fn wander_system(
 
         // polar-cartesian conversion
         let circle_offset = Vec2 {
-            // x: wander_radius * cos(wander_theta + heading),
             x: wander_radius * cos(theta),
             y: wander_radius * sin(theta),
         };
@@ -190,7 +190,6 @@ fn wander_system(
         velocity.0 += steer * time.delta_secs();
 
         // if debug draw circles
-        // TODO draw wander radius circle
         if debug.0 {
             for mut circle_position in debug_query.iter_mut() {
                 circle_position.0 = target;
@@ -203,25 +202,120 @@ fn wander_system(
     }
 }
 
-// pub fn calc_wander(
-//     position: &Position,
-//     velocity: &LinearVelocity,
-//     distance_ahead: f32,
-//     wander_radius: f32,
-//     wander_theta: f32,
-// ) -> Vec2 {
-//     let mut circle_pos = set_magnitude(velocity.0, distance_ahead);
-//     circle_pos += position.0;
+fn on_start_pursue(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut rng: GlobalEntropy<WyRand>,
+    ship: Single<&mut MaxLinearSpeed, With<Ship>>,
+) {
+    // add target
+    let target_radius = 15.;
+    let circle = Circle::new(target_radius);
+    let yellow: Color = YELLOW_GREEN.into();
+    let random_x = rng.random_range(-20.0..20.);
+    let random_y = rng.random_range(-20.0..20.);
 
-//     let heading = heading(velocity.0);
-//     let theta = wander_theta + heading;
+    let offset_radius = 5.;
+    let offset_circle = Circle::new(offset_radius);
+    let offset_colour: Color = YELLOW.into();
 
-//     // polar-cartesian conversion
-//     let circle_offset = Vec2 {
-//         // x: wander_radius * cos(wander_theta + heading),
-//         x: wander_radius * cos(theta),
-//         y: wander_radius * sin(theta),
-//     };
+    commands.spawn((
+        Mesh2d(meshes.add(circle)),
+        MeshMaterial2d(materials.add(ColorMaterial::from(yellow))),
+        Transform::from_xyz(0., 0., 0.),
+        PursueTarget,
+        RigidBody::Kinematic,
+        LinearVelocity(Vec2::new(random_x * 10., random_y * 10.)),
+        WrapEdges,
+        MaxLinearSpeed(200.0),
+    ));
 
-//     circle_pos + circle_offset
-// }
+    commands.spawn((
+        Mesh2d(meshes.add(offset_circle)),
+        MeshMaterial2d(materials.add(ColorMaterial::from(offset_colour))),
+        Transform::from_xyz(0., 0., 0.),
+        PursueOffset,
+        RigidBody::Kinematic,
+    ));
+
+    let mut ship = ship.into_inner();
+    ship.0 = 300.;
+}
+
+// TODO reset target pos and speed on capture
+#[allow(clippy::type_complexity)]
+fn pursue_system(
+    ship_query: Single<
+        (&mut LinearVelocity, &MaxLinearSpeed, &Position),
+        (With<Ship>, Without<PursueTarget>),
+    >,
+    target_query: Single<(&Position, &LinearVelocity), (With<PursueTarget>, Without<Ship>)>,
+    offset_query: Single<&mut Position, (With<PursueOffset>, Without<Ship>, Without<PursueTarget>)>,
+    time: Res<Time>,
+) {
+    let (mut velocity, max_speed, position) = ship_query.into_inner();
+    let (target_pos, target_velocity) = target_query.into_inner();
+
+    // adjust this based on speed of target
+    let distance_ahead = 25.;
+
+    // target = circle
+    // offset = place ship needs to aim for
+    // heading() ends up 90deg off for target
+    let target_heading = atan2(target_velocity.0.y, target_velocity.0.x);
+    let mut offset_pos = set_magnitude(target_velocity.0, distance_ahead);
+    offset_pos += target_pos.0;
+
+    let mut target_offset = Vec2 {
+        x: distance_ahead * cos(target_heading),
+        y: distance_ahead * sin(target_heading),
+    };
+    target_offset += offset_pos;
+    let mut offset = offset_query.into_inner();
+    offset.0 = target_offset;
+
+    let mut to_target = target_offset - position.0;
+    to_target = set_magnitude(to_target, max_speed.0);
+
+    let steer = to_target - velocity.0;
+    velocity.0 += steer * time.delta_secs();
+}
+
+fn clean_up_pursue(
+    mut commands: Commands,
+    target_query: Single<Entity, With<PursueTarget>>,
+    offset_query: Single<Entity, With<PursueOffset>>,
+    ship: Single<&mut MaxLinearSpeed, With<Ship>>,
+) {
+    let target = target_query.into_inner();
+    commands.entity(target).despawn();
+    let offset = offset_query.into_inner();
+    commands.entity(offset).despawn();
+
+    // reset max speed
+    let mut ship = ship.into_inner();
+    ship.0 = 200.;
+}
+
+// call on ship/target collision
+#[allow(clippy::complexity)]
+fn reset_pursue_target(
+    target_query: Single<(&mut Position, &mut LinearVelocity), (With<PursueTarget>, Without<Ship>)>,
+    mut rng: GlobalEntropy<WyRand>,
+) {
+    let (mut position, mut velocity) = target_query.into_inner();
+
+    let random_x = rng.random_range(-20.0..20.);
+    let random_y = rng.random_range(-20.0..20.);
+
+    let pos_x = rng.random_range(-300.0..300.);
+    let pos_y = rng.random_range(-300.0..300.);
+
+    velocity.0 = Vec2::new(random_x * 10., random_y * 10.);
+    position.0 = Vec2::new(pos_x, pos_y);
+}
+
+// followpath
+// evade
+// flee
