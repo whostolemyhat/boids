@@ -49,6 +49,7 @@ fn setup(
         RigidBody::Kinematic,
         MaxLinearSpeed(250.0),
         MaxAngularSpeed(10.0),
+        Collider::circle(9.),
         Ship,
         WrapEdges,
     ));

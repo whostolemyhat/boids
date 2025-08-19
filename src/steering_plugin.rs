@@ -39,6 +39,7 @@ impl Plugin for SteeringPlugin {
                     arrive_system.run_if(in_state(Behaviour::Arrive)),
                     wander_system.run_if(in_state(Behaviour::Wander)),
                     pursue_system.run_if(in_state(Behaviour::Pursue)),
+                    reset_pursue_target,
                     rotate_system,
                 ),
             )
@@ -229,6 +230,8 @@ fn on_start_pursue(
         LinearVelocity(Vec2::new(random_x * 10., random_y * 10.)),
         WrapEdges,
         MaxLinearSpeed(200.0),
+        CollisionEventsEnabled,
+        Collider::circle(target_radius),
     ));
 
     commands.spawn((
@@ -243,7 +246,6 @@ fn on_start_pursue(
     ship.0 = 300.;
 }
 
-// TODO reset target pos and speed on capture
 #[allow(clippy::type_complexity)]
 fn pursue_system(
     ship_query: Single<
@@ -301,19 +303,24 @@ fn clean_up_pursue(
 // call on ship/target collision
 #[allow(clippy::complexity)]
 fn reset_pursue_target(
+    mut collision_event_reader: EventReader<CollisionStarted>,
     target_query: Single<(&mut Position, &mut LinearVelocity), (With<PursueTarget>, Without<Ship>)>,
     mut rng: GlobalEntropy<WyRand>,
 ) {
     let (mut position, mut velocity) = target_query.into_inner();
 
-    let random_x = rng.random_range(-20.0..20.);
-    let random_y = rng.random_range(-20.0..20.);
+    for CollisionStarted(_first, _second) in collision_event_reader.read() {
+        println!("Caught!");
 
-    let pos_x = rng.random_range(-300.0..300.);
-    let pos_y = rng.random_range(-300.0..300.);
+        let random_x = rng.random_range(-20.0..20.);
+        let random_y = rng.random_range(-20.0..20.);
 
-    velocity.0 = Vec2::new(random_x * 10., random_y * 10.);
-    position.0 = Vec2::new(pos_x, pos_y);
+        let pos_x = rng.random_range(-300.0..300.);
+        let pos_y = rng.random_range(-300.0..300.);
+
+        velocity.0 = Vec2::new(random_x * 10., random_y * 10.);
+        position.0 = Vec2::new(pos_x, pos_y);
+    }
 }
 
 // followpath
