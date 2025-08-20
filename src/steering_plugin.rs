@@ -192,8 +192,7 @@ fn wander_system(
         let target = circle_pos + circle_offset;
 
         // seek
-        let mut steer = target - position.0;
-        steer = set_magnitude(steer, max_linear_speed.0);
+        let steer = seek(&target, &velocity, max_linear_speed.0, position);
         velocity.0 += steer * time.delta_secs();
 
         // if debug draw circles
@@ -283,10 +282,8 @@ fn pursue_system(
     let mut offset = offset_query.into_inner();
     offset.0 = target_offset;
 
-    let mut to_target = target_offset - position.0;
-    to_target = set_magnitude(to_target, max_speed.0);
-
-    let steer = to_target - velocity.0;
+    let to_target = target_offset - position.0;
+    let steer = seek(&to_target, &velocity, max_speed.0, position);
     velocity.0 += steer * time.delta_secs();
 }
 
@@ -332,7 +329,6 @@ fn reset_pursue_target(
 // followpath
 // evade
 
-// TODO refactor
 fn flee_system(
     mut query: Query<(&mut LinearVelocity, &MaxLinearSpeed, &Position), With<Ship>>,
     mouse_pos: Res<MousePos>,
@@ -345,5 +341,39 @@ fn flee_system(
         let steer = seek(&to_cursor, &velocity, max_linear_speed.0, position).mul(-1.);
 
         velocity.0 += steer * time.delta_secs();
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::steering_plugin::seek;
+    use bevy::prelude::*;
+
+    #[test]
+    fn seek_should_return_vec2() {
+        let target = Vec2::new(10.0, -12.0);
+        let velocity = Vec2::new(180.0, -123.0);
+        let max_speed = 14.0;
+        let position = Vec2::new(14.0, 18.0);
+
+        assert_eq!(
+            seek(&target, &velocity, max_speed, &position),
+            Vec2::new(-181.8503, 109.12281)
+        );
+
+        let target = Vec2::new(-102.0, 130.0);
+
+        assert_eq!(
+            seek(&target, &velocity, max_speed, &position),
+            Vec2::new(-190.07162, 132.72432)
+        );
+
+        let target = Vec2::new(10.0, -12.0);
+        let max_speed = 2.0;
+
+        assert_eq!(
+            seek(&target, &velocity, max_speed, &position),
+            Vec2::new(-180.26433, 121.01755)
+        );
     }
 }
