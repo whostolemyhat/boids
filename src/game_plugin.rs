@@ -74,6 +74,7 @@ fn setup(
                 create_normal_button("Arrive"),
                 create_normal_button("Wander"),
                 create_normal_button("Pursue"),
+                create_normal_button("Flee"),
             ],
         )],
     ));
@@ -92,6 +93,7 @@ fn button(btn_text: &str) -> impl Bundle + use<> {
         "Arrive" => Behaviour::Arrive,
         "Wander" => Behaviour::Wander,
         "Pursue" => Behaviour::Pursue,
+        "Flee" => Behaviour::Flee,
         _ => Behaviour::Seek,
     };
 

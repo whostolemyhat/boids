@@ -4,6 +4,7 @@ use bevy::prelude::*;
 use bevy_rand::prelude::*;
 use rand::Rng;
 use std::f32::consts::PI;
+use std::ops::Mul;
 
 use bevy::color::palettes::css::{YELLOW, YELLOW_GREEN};
 
@@ -19,6 +20,7 @@ pub enum Behaviour {
     Arrive,
     Wander,
     Pursue,
+    Flee,
 }
 
 #[derive(Resource)]
@@ -39,6 +41,7 @@ impl Plugin for SteeringPlugin {
                     arrive_system.run_if(in_state(Behaviour::Arrive)),
                     wander_system.run_if(in_state(Behaviour::Wander)),
                     pursue_system.run_if(in_state(Behaviour::Pursue)),
+                    flee_system.run_if(in_state(Behaviour::Flee)),
                     reset_pursue_target,
                     rotate_system,
                 ),
@@ -121,13 +124,16 @@ fn seek_system(
     time: Res<Time>,
 ) {
     for (mut velocity, max_linear_speed, position) in &mut query {
-        let mut to_cursor = mouse_pos.0 - position.0;
-        to_cursor = set_magnitude(to_cursor, max_linear_speed.0);
-
-        let steer = to_cursor - velocity.0;
-
+        let steer = seek(&mouse_pos.0, &velocity.0, max_linear_speed.0, &position.0);
         velocity.0 += steer * time.delta_secs();
     }
+}
+
+fn seek(target: &Vec2, velocity: &Vec2, max_linear_speed: f32, position: &Vec2) -> Vec2 {
+    let mut to_cursor = target - position;
+    to_cursor = set_magnitude(to_cursor, max_linear_speed);
+
+    to_cursor - velocity
 }
 
 fn arrive_system(
@@ -325,4 +331,19 @@ fn reset_pursue_target(
 
 // followpath
 // evade
-// flee
+
+// TODO refactor
+fn flee_system(
+    mut query: Query<(&mut LinearVelocity, &MaxLinearSpeed, &Position), With<Ship>>,
+    mouse_pos: Res<MousePos>,
+    time: Res<Time>,
+) {
+    // seek but in opposite direction
+    for (mut velocity, max_linear_speed, position) in &mut query {
+        let to_cursor = mouse_pos.0 - position.0;
+
+        let steer = seek(&to_cursor, &velocity, max_linear_speed.0, position).mul(-1.);
+
+        velocity.0 += steer * time.delta_secs();
+    }
+}
