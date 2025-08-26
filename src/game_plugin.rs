@@ -75,6 +75,7 @@ fn setup(
                 create_normal_button("Wander"),
                 create_normal_button("Pursue"),
                 create_normal_button("Flee"),
+                create_normal_button("Evade"),
             ],
         )],
     ));
@@ -94,6 +95,7 @@ fn button(btn_text: &str) -> impl Bundle + use<> {
         "Wander" => Behaviour::Wander,
         "Pursue" => Behaviour::Pursue,
         "Flee" => Behaviour::Flee,
+        "Evade" => Behaviour::Evade,
         _ => Behaviour::Seek,
     };
 
